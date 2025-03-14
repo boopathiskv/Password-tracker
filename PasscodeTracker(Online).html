@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Password Tracker</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script> 
+
+</head>
+
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">Password Tracker</h1>
+        <div class="row">
+            <div class="col-9"></div>
+        </div>
+        <div class="row">
+            <button id="btnshowhide" class="btn btn-primary col-2 m-2"> Add Password</button>
+            <button id="importJson" class="btn btn-success col-2 m-2">Import File</button>
+            <button id="exportJson" class="btn btn-dark col-2 m-2">Export to File</button>
+            <div class="col-1"></div>
+            <input type="password" id="btnekey" class="col-2 m-2 form-control-sm" minlength="6"
+                placeholder="Enter Encryption Key" required>
+            <button id="btnResetPage" class="btn btn-danger col-2 m-2">Reset Page</button>
+
+        </div>
+        <div>
+            <label for="file-type">Choose a file type to download:</label>
+            <select id="file-type">
+                <option value="Select">Select</option>
+                <option value="json">JSON</option>
+                <option value="text">Text</option>
+                <option value="bin">Binary</option>
+            </select>
+        </div>
+        <div id="tbfuctions">
+
+
+
+
+            <div class="card mt-4">
+                <div class="card-body">
+                    <form id="passwordForm">
+                        <div class="mb-3">
+                            <label for="website" class="form-label">Website</label>
+                            <input type="text" id="website" class="form-control" maxlength="255"
+                                placeholder="Enter website name"  required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" id="username" class="form-control" maxlength="100"
+                                placeholder="Enter username" autocomplete="off" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <div class="input-group">
+                                <input type="password" id="password" class="form-control" minlength="9"
+                                    placeholder="Enter password" required>
+                                <button type="button" class="btn btn-outline-secondary" id="togglePassword">
+                                    Show
+                                </button>
+                            </div>
+                            <div id="passwordFeedback"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Password</button>
+                        <button type="button" id="clearFields" class="btn btn-secondary">Clear Fields</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="mt-4">
+            <input type="text" id="search" class="form-control" placeholder="Search by website...">
+        </div>
+
+
+        <table class="table table-bordered table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Website</th>
+                    <th>Username</th>
+                    <th>Password</th>
+                    <th>Creation Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="passwordTable">
+                <!-- Password entries will go here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        let passwords = [];
+        let masterPassword;
+        let pinKeyCode=null;
+        var passwordchanges=false;
+        const version="_21";
+        const togglePassword = document.getElementById('togglePassword');
+        const passwordInput = document.getElementById('password');
+
+        togglePassword.addEventListener('click', function () {
+            // Toggle the type attribute
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+
+            // Toggle the button text
+            this.textContent = type === 'password' ? 'Show' : 'Hide';
+        });
+
+        $(document).ready(function () {
+            $("#tbfuctions").hide();
+            $('#passwordFeedback').text('');
+            // Block right-click
+            $(document).on('contextmenu', function(e) {
+                e.preventDefault();
+            });
+
+            // Detect Print Screen key (not reliable)
+            $(document).on('keydown', function(e) {
+                if (e.key === 'PrintScreen') {
+                    alert('Print Screen is disabled on this page.');
+                    e.preventDefault();
+                }
+            });
+
+            // Clear input fields
+            $('#clearFields').on('click', function () {
+                clearField();
+                //$('#btnekey').val(''); // Clear the encryption key field if needed
+            });
+
+            function clearField(){
+                $('#website').val('');
+                $('#username').val('');
+                $('#password').val('');
+                $('#passwordFeedback').text('');
+            }
+
+            $("#btnshowhide").click(function () {
+                getekey();
+
+                $("#tbfuctions").toggle();
+            });
+
+            $('#password').on('input', function() {
+                const password = $(this).val().trim();
+                const passwordCriteria = {
+                    minLength: 9,
+                    hasUpperCase: /[A-Z]/.test(password),
+                    hasLowerCase: /[a-z]/.test(password),
+                    hasNumbers: /\d/.test(password),
+                    hasSpecialChars: /[!@#$%^&*(),.?":{}|<>']/.test(password)
+                };
+
+                const isValid = password.length >= passwordCriteria.minLength &&
+                                passwordCriteria.hasUpperCase &&
+                                passwordCriteria.hasLowerCase &&
+                                passwordCriteria.hasNumbers &&
+                                passwordCriteria.hasSpecialChars;
+
+                if (isValid) {
+                    $('#passwordFeedback').text('Password is valid!').css('color', 'green');
+                } else {
+                    $('#passwordFeedback').text('Password must be at least 9 characters long, contain uppercase letters, lowercase letters, numbers, and special characters.').css('color', 'red');
+                }
+            });
+
+        });
+
+
+        function hashKey(key) {
+            return CryptoJS.SHA512(key).toString();
+        }
+
+        // Function to encrypt text with a key
+        function encrypt(text, key) {
+            const hashedKeyAES = hashKey(key);
+            const hashedKeyDES = hashKey(hashedKeyAES);
+            const encryptedAES = CryptoJS.AES.encrypt(text, hashedKeyAES).toString();            
+            const encryptedDES = CryptoJS.DES.encrypt(encryptedAES, hashedKeyDES).toString();
+            return encryptedDES;
+        }
+
+        // Function to decrypt text with a key
+        function decrypt(text, key) {
+            const hashedKeyAES = hashKey(key);
+            const hashedKeyDES = hashKey(hashedKeyAES);
+            const decryptedDES = CryptoJS.DES.decrypt(text, hashedKeyDES).toString(CryptoJS.enc.Utf8);
+            const bytes = CryptoJS.AES.decrypt(decryptedDES, hashedKeyAES);
+            return bytes.toString(CryptoJS.enc.Utf8);
+        }
+                    
+        function getekey() {
+            masterPassword = $("#btnekey").val();
+            //masterPassword = CryptoJS.MD5(masterPassword);
+            if (!masterPassword || masterPassword.length < 6) {
+                alert("Enter Encryption Key is required!");
+                throw new Error("Master password is required");
+            }
+            $('#btnekey').prop('disabled', true);
+            $('#passwordFeedback').text('');
+            return true;
+        }
+        // Add password
+
+        // Add password
+        $('#passwordForm').on('submit', function (e) {
+           
+            e.preventDefault(); // Prevent the default form submission
+
+            getekey(); // Get the encryption key
+            $('#btnekey').prop('disabled', true);
+            const website = $('#website').val().trim();
+            const username = $('#username').val().trim();
+            const password = $('#password').val().trim();
+            const createdAt = new Date().toISOString(); // Get the current date and time
+
+            // Check for existing website and username
+            const exists = passwords.some(item =>
+                decrypt(item.website, masterPassword) === website &&
+                decrypt(item.username, masterPassword) === username
+            );
+
+            if (exists) {
+                alert("This website and username combination already exists!");
+                return; // Exit the function to prevent adding the duplicate
+            }
+
+            // Encrypt the new password details
+            const encryptedWebsite = encrypt(website, masterPassword);
+            const encryptedUsername = encrypt(username, masterPassword);
+            const encryptedPassword = encrypt(password, masterPassword);
+            const encryptedcreatedAt = encrypt(createdAt, masterPassword);
+          
+            // Add the new password entry with creation date
+            passwords.push({
+                website: encryptedWebsite,
+                username: encryptedUsername,
+                password: encryptedPassword,
+                createdAt: encryptedcreatedAt // Store the creation date
+            });
+            passwordchanges=true;
+            $("#tbfuctions").toggle();
+            updateTable(); // Update the table to show the new entry
+            this.reset(); // Reset the form fields
+        });
+
+        // Update table
+        function updateTable() {
+            getekey();
+            const tableBody = $('#passwordTable');
+            tableBody.empty();
+
+            passwords.forEach((item, index) => {
+                const decryptedPassword = decrypt(item.password, masterPassword);
+                const decryptedcreatedAt = encrypt(item.createdAt, masterPassword);
+                const creationDate = new Date(decryptedcreatedAt).toLocaleString(); // Format the creation date
+                tableBody.append(`
+            <tr>
+                <td>${index + 1}</td>
+                <td>${decrypt(item.website, masterPassword)}</td>
+                <td>${decrypt(item.username, masterPassword)}</td>
+                <td>
+                    <input type="password" class="password-text" value="${decryptedPassword}" readonly />
+                    <button class="btn btn-outline-secondary btn-sm toggle-password" data-index="${index}">Show</button>
+                </td>
+                <td>${creationDate}</td> <!-- Display the creation date -->
+                <td>
+                    <button class="btn btn-outline-info btn-sm copy-password" data-password="${decryptedPassword}">Copy</button>
+                    <button class="btn btn-warning btn-sm" onclick="editPassword(${index})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deletePassword(${index})">Delete</button>
+                </td>
+            </tr>
+        `);
+            });
+        }
+        // Toggle password visibility
+        $(document).on('click', '.toggle-password', function () {
+            const index = $(this).data('index');
+            const passwordText = $(this).siblings('.password-text');
+
+            // Toggle visibility
+            if (passwordText.attr('type') === 'password') {
+                passwordText.attr('type', 'text');
+                $(this).text('Hide');
+            } else {
+                passwordText.attr('type', 'password');
+                $(this).text('Show');
+            }
+        });
+
+        // Copy password to clipboard
+        $(document).on('click', '.copy-password', function () {
+            const password = $(this).data('password');
+
+            // Use the Clipboard API to copy the password
+            navigator.clipboard.writeText(password).then(() => {
+                alert('Password copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });            
+        });
+
+
+        // Edit password
+        function editPassword(index) {            
+            getekey();
+            const item = passwords[index];          
+            $('#website').val(decrypt(item.website, masterPassword));
+            $('#username').val(decrypt(item.username, masterPassword));
+            $('#password').val(decrypt(item.password, masterPassword));
+            passwords.splice(index, 1); // Remove the item being edited
+            $("#tbfuctions").toggle();
+            updateTable();
+        }
+
+        // Delete password
+        function deletePassword(index) {
+            passwordchanges=true;
+            passwords.splice(index, 1);
+            updateTable();
+        }
+
+        // Search passwords
+        $('#search').on('input', function () {
+            const query = $(this).val().toLowerCase();
+            const filtered = passwords.filter(item =>
+                decrypt(item.website, masterPassword).toLowerCase().includes(query)
+            );
+
+            const tableBody = $('#passwordTable');
+            tableBody.empty();           
+            filtered.forEach((item, index) => {
+                const decryptedPassword = decrypt(item.password, masterPassword);
+                const decryptedcreatedAt = encrypt(item.createdAt, masterPassword);
+                const creationDate = new Date(decryptedcreatedAt).toLocaleString(); // Format the creation date
+                tableBody.append(`
+            <tr>
+                <td>${index + 1}</td>
+                <td>${decrypt(item.website, masterPassword)}</td>
+                <td>${decrypt(item.username, masterPassword)}</td>
+                <td>
+                    <input type="password" class="password-text" value="${decryptedPassword}" readonly />
+                    <button class="btn btn-outline-secondary btn-sm toggle-password" data-index="${index}">Show</button>
+                </td>
+                <td>${creationDate}</td> <!-- Display the creation date -->
+                <td>
+                    <button class="btn btn-outline-info btn-sm copy-password" data-password="${decryptedPassword}">Copy</button>
+                    <button class="btn btn-warning btn-sm" onclick="editPassword(${index})">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deletePassword(${index})">Delete</button>
+                </td>
+            </tr>
+        `);
+            });
+        });
+
+        // Export passwords to JSON file
+        $('#exportJson').on('click', function () {          
+           ExportFile();
+        });
+
+        function ExportFile()
+        {
+            getekey();
+            if (!passwords || passwords.length == 0) {
+                alert("No Data Export, Add password!");
+                return;
+            }
+                const fileType = $('#file-type').val();     
+                let fileName = '';
+                let mimeType = '';
+                const dateObj = new Date();
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const year = dateObj.getFullYear();
+                // Set file content and properties based on selected file type
+                if (fileType === 'json') {
+                    fileName = `pwd_${day}${month}${year}${version}.json`;
+                    mimeType = 'application/json';
+                } else if (fileType === 'text') {
+                    fileName = `pwd_${day}${month}${year}${version}.text`;
+                    mimeType = 'text/plain';
+                } else if (fileType === 'bin') {
+                    fileName = `pwd_${day}${month}${year}${version}.bin`;
+                    mimeType = 'application/octet-stream';
+                }
+                else{
+                    alert("select Export file type.");
+                    return;
+                }   
+                passwordchanges=false;  
+                
+                
+
+            const jsonData = JSON.stringify(passwords, null, 4); // Convert passwords to JSON
+            const encryptedData = encrypt(jsonData, masterPassword);
+            // Convert the encrypted data into a binary format (this is already done if it's in encrypted form)
+            //const blob = new Blob([new TextEncoder().encode(encryptedData)], { type: 'application/octet-stream' }); // Use application/octet-stream for binary files
+            const blob = new Blob([encryptedData], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+
+
+            a.download = fileName; // Save as .bin file
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Import passwords from JSON file
+        $('#importJson').on('click', function () {
+            getekey();
+            if (passwordchanges)
+             {
+                if (confirm('You have modified the password. Would you like to import the password? Cancel to discard your changes.')) 
+                {
+                    ExportFile();
+                    if (!passwordchanges)
+                    {                    
+                        window.location.reload();
+                    } 
+                    else 
+                    {
+                        return;
+                   }
+                } 
+                else {
+                    window.location.reload();
+                }
+            }
+            $('#btnekey').prop('disabled', true);
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json, .bin, .txt';  // Accept .bin files
+            input.onchange = function (event) {
+                const file = event.target.files[0];
+                if (file) {
+
+                    const fileName=file.name;
+                    if (!fileName.includes(version)) {
+                        alert("This version is not supported!");
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        try {
+                            const encryptedData = new TextDecoder().decode(e.target.result); // Decode the binary data
+                            const decryptdData = decrypt(encryptedData, masterPassword);
+                            const importedPasswords = JSON.parse(decryptdData); // Parse the decrypted JSON
+
+                            // Map the imported data to your password structure
+                            passwords = importedPasswords.map(item => ({
+                                website: item.website,
+                                username: item.username,
+                                password: item.password,
+                                createdAt: item.createdAt
+                            }));
+                            updateTable(); // Update the table with imported data
+                        } catch (err) {
+                            alert('Invalid .bin file or decryption failed!');
+                            $('#btnekey').prop('disabled', false);
+                        }
+                    };
+                    reader.readAsArrayBuffer(file); // Read the .bin file as an ArrayBuffer (binary data)
+                }
+            };
+            input.click(); // Trigger the file input dialog
+        });
+
+
+        $("#btnResetPage").click(function() {
+            if (passwordchanges) {
+                if (confirm('You have modified the password. Would you like to import the password? Cancel to discard your changes.')) {
+                    ExportFile();
+                    if (!passwordchanges) {                    
+                        window.location.reload();
+                      } 
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                window.location.reload();
+            }
+        });
+
+
+
+
+
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</body>
+
+</html>
